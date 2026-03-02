@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState, useEffect, useCallback } from "react";
 import { Game, Player, DailyEntry } from "@/lib/types";
 
 interface UseGameReturn {
@@ -13,6 +12,12 @@ interface UseGameReturn {
   refreshGame: () => Promise<void>;
 }
 
+interface GameStateResponse {
+  game: Game;
+  players: Player[];
+  entries: DailyEntry[];
+}
+
 export function useGame(gameCode: string): UseGameReturn {
   const [game, setGame] = useState<Game | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -20,34 +25,25 @@ export function useGame(gameCode: string): UseGameReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const supabaseRef = useRef(createClient());
-
   const fetchData = useCallback(async () => {
-    const supabase = supabaseRef.current;
     try {
-      const { data: gameData, error: gameError } = await supabase
-        .from("games")
-        .select("*")
-        .eq("game_code", gameCode.toUpperCase())
-        .single();
+      const response = await fetch(`/api/games/${gameCode}/state`, {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (gameError) throw new Error("Game not found");
-      setGame(gameData);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(body.error || "Failed to load game");
+      }
 
-      const { data: playersData } = await supabase
-        .from("players")
-        .select("*")
-        .eq("game_id", gameData.id)
-        .order("is_creator", { ascending: false });
-
-      setPlayers(playersData || []);
-
-      const { data: entriesData } = await supabase
-        .from("daily_entries")
-        .select("*")
-        .eq("game_id", gameData.id);
-
-      setEntries(entriesData || []);
+      const data = (await response.json()) as GameStateResponse;
+      setGame(data.game);
+      setPlayers(data.players);
+      setEntries(data.entries);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load game");
     } finally {
@@ -59,71 +55,16 @@ export function useGame(gameCode: string): UseGameReturn {
     fetchData();
   }, [fetchData]);
 
-  // Realtime subscriptions
+  // Poll server state to keep devices in sync even when realtime sockets fail.
   useEffect(() => {
-    if (!game?.id) return;
-
-    const supabase = supabaseRef.current;
-    const channel = supabase
-      .channel(`game-${game.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "daily_entries",
-          filter: `game_id=eq.${game.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setEntries((prev) => {
-              const exists = prev.some((e) => e.id === payload.new.id);
-              if (exists) return prev;
-              return [...prev, payload.new as DailyEntry];
-            });
-          } else if (payload.eventType === "UPDATE") {
-            setEntries((prev) =>
-              prev.map((e) =>
-                e.id === payload.new.id ? (payload.new as DailyEntry) : e
-              )
-            );
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "players",
-          filter: `game_id=eq.${game.id}`,
-        },
-        (payload) => {
-          setPlayers((prev) => {
-            const exists = prev.some((p) => p.id === payload.new.id);
-            if (exists) return prev;
-            return [...prev, payload.new as Player];
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "games",
-          filter: `id=eq.${game.id}`,
-        },
-        (payload) => {
-          setGame(payload.new as Game);
-        }
-      )
-      .subscribe();
+    const id = window.setInterval(() => {
+      fetchData();
+    }, 5000);
 
     return () => {
-      supabase.removeChannel(channel);
+      window.clearInterval(id);
     };
-  }, [game?.id]);
+  }, [fetchData]);
 
   return {
     game,
