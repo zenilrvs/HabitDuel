@@ -51,15 +51,15 @@ export async function POST(
       );
     }
 
-    // Delete all daily entries for this game
-    const { error: deleteError } = await supabase
+    // Mark all daily entries as not completed (DELETE not allowed by RLS)
+    const { error: updateEntriesError } = await supabase
       .from("daily_entries")
-      .delete()
+      .update({ completed: false, updated_at: new Date().toISOString() })
       .eq("game_id", game.id);
 
-    if (deleteError) {
+    if (updateEntriesError) {
       return NextResponse.json(
-        { error: deleteError.message },
+        { error: updateEntriesError.message },
         { status: 500 }
       );
     }
