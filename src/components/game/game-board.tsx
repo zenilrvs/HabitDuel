@@ -51,6 +51,8 @@ export function GameBoard({
   const [newHabitPoints, setNewHabitPoints] = useState("5");
   const [newHabitType, setNewHabitType] = useState<"good" | "bad">("good");
   const [isAddingHabit, setIsAddingHabit] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const currentPlayer = players.find((p) => p.id === currentPlayerId);
   const opponent = players.find((p) => p.id !== currentPlayerId);
@@ -111,6 +113,31 @@ export function GameBoard({
     }
   };
 
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      const res = await fetch(`/api/games/${gameCode}/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ player_id: currentPlayerId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to reset game");
+        return;
+      }
+
+      toast.success("Game reset! Starting fresh from Week 1.");
+      setResetDialogOpen(false);
+      await refreshGame();
+    } catch {
+      toast.error("Failed to reset. Check your connection.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <main className="min-h-screen pb-8">
       <div className="border-b border-yellow-400/25 bg-card/60 backdrop-blur-xl">
@@ -132,71 +159,103 @@ export function GameBoard({
                 {isOver ? "Finished" : "Live"}
               </Badge>
               {currentPlayer?.is_creator && (
-                <Dialog open={habitDialogOpen} onOpenChange={setHabitDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={!canAddHabit}>
-                      + Add Habit
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="border-yellow-400/30 bg-card/95">
-                    <DialogHeader>
-                      <DialogTitle>Add Habit Mid-Game</DialogTitle>
-                      <DialogDescription>
-                        This habit is immediately added for both players and can
-                        be tracked from today onward.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="new-habit-name">Habit name</Label>
-                        <Input
-                          id="new-habit-name"
-                          placeholder="e.g. Meditate"
-                          value={newHabitName}
-                          onChange={(e) => setNewHabitName(e.target.value)}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
+                <>
+                  <Dialog open={habitDialogOpen} onOpenChange={setHabitDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={!canAddHabit}>
+                        + Add Habit
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="border-yellow-400/30 bg-card/95">
+                      <DialogHeader>
+                        <DialogTitle>Add Habit Mid-Game</DialogTitle>
+                        <DialogDescription>
+                          This habit is immediately added for both players and can
+                          be tracked from today onward.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
                         <div className="space-y-2">
-                          <Label htmlFor="new-habit-points">Points</Label>
+                          <Label htmlFor="new-habit-name">Habit name</Label>
                           <Input
-                            id="new-habit-points"
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={newHabitPoints}
-                            onChange={(e) => setNewHabitPoints(e.target.value)}
+                            id="new-habit-name"
+                            placeholder="e.g. Meditate"
+                            value={newHabitName}
+                            onChange={(e) => setNewHabitName(e.target.value)}
                           />
                         </div>
-                        <div className="space-y-2">
-                          <Label>Type</Label>
-                          <Select
-                            value={newHabitType}
-                            onValueChange={(value) =>
-                              setNewHabitType(value as "good" | "bad")
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="good">Good</SelectItem>
-                              <SelectItem value="bad">Bad</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="new-habit-points">Points</Label>
+                            <Input
+                              id="new-habit-points"
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={newHabitPoints}
+                              onChange={(e) => setNewHabitPoints(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Type</Label>
+                            <Select
+                              value={newHabitType}
+                              onValueChange={(value) =>
+                                setNewHabitType(value as "good" | "bad")
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="good">Good</SelectItem>
+                                <SelectItem value="bad">Bad</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        onClick={handleAddHabit}
-                        disabled={isAddingHabit || !newHabitName.trim()}
-                      >
-                        {isAddingHabit ? "Adding..." : "Add Habit"}
+                      <DialogFooter>
+                        <Button
+                          onClick={handleAddHabit}
+                          disabled={isAddingHabit || !newHabitName.trim()}
+                        >
+                          {isAddingHabit ? "Adding..." : "Add Habit"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                  <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300">
+                        Reset
                       </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                    </DialogTrigger>
+                    <DialogContent className="border-yellow-400/30 bg-card/95">
+                      <DialogHeader>
+                        <DialogTitle>Reset Game</DialogTitle>
+                        <DialogDescription>
+                          This will clear all entries for both players and restart from Week 1 today. Your habits and points will stay the same.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                          variant="outline"
+                          onClick={() => setResetDialogOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={handleReset}
+                          disabled={isResetting}
+                        >
+                          {isResetting ? "Resetting..." : "Yes, Reset Game"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </>
               )}
             </div>
           </div>
