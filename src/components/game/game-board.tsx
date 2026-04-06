@@ -53,6 +53,7 @@ export function GameBoard({
   const [isAddingHabit, setIsAddingHabit] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
 
   const currentPlayer = players.find((p) => p.id === currentPlayerId);
   const opponent = players.find((p) => p.id !== currentPlayerId);
@@ -131,6 +132,7 @@ export function GameBoard({
       toast.success("Game reset! Starting fresh from Week 1.");
       setResetDialogOpen(false);
       await refreshGame();
+      setResetKey((k) => k + 1);
     } catch {
       toast.error("Failed to reset. Check your connection.");
     } finally {
@@ -235,7 +237,7 @@ export function GameBoard({
                       <DialogHeader>
                         <DialogTitle>Reset Game</DialogTitle>
                         <DialogDescription>
-                          This will clear all entries for both players and restart from Week 1 today. Your habits and points will stay the same.
+                          This will clear all entries and reset all scores to zero for both players. The game restarts from Week 1 today. Your habits stay the same.
                         </DialogDescription>
                       </DialogHeader>
                       <DialogFooter className="gap-2 sm:gap-0">
@@ -290,6 +292,7 @@ export function GameBoard({
 
           <TabsContent value="daily" className="mt-4">
             <DailyTab
+              key={`daily-${resetKey}`}
               game={game}
               players={players}
               entries={entries}
@@ -300,6 +303,7 @@ export function GameBoard({
 
           <TabsContent value="weekly" className="mt-4">
             <WeeklyTab
+              key={`weekly-${resetKey}`}
               game={game}
               players={players}
               entries={entries}
